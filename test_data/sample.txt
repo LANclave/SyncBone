@@ -1,0 +1,2 @@
+This is a sample file for SyncBone copy test.
+Line 2: Hello SyncBone!!!

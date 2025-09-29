@@ -1,4 +1,12 @@
-// sync.hpp - core synchronization interfaces
+/**
+ * \file sync.hpp
+ * \brief Core synchronization interfaces for SyncBone.
+ *
+ * Provides functions for one-way recursive directory synchronization based on
+ * SHA-256 content comparison (with a quick size pre-check). New files and
+ * directories are created as needed; extra entries present only in the
+ * destination are NOT removed (no pruning phase yet).
+ */
 #pragma once
 #include <filesystem>
 #include <string>
@@ -7,21 +15,45 @@
 namespace syncbone {
 namespace fs = std::filesystem;
 
+/**
+ * \struct SyncStats
+ * \brief Accumulated statistics for a synchronization run.
+ */
 struct SyncStats {
-    std::uintmax_t files_copied = 0;
-    std::uintmax_t files_skipped = 0;
-    std::uintmax_t dirs_created = 0;
+    std::uintmax_t files_copied = 0;  //!< Number of files actually copied (new or changed)
+    std::uintmax_t files_skipped = 0; //!< Number of files skipped because they were identical
+    std::uintmax_t dirs_created = 0;  //!< Number of subdirectories created
 };
 
-// Compute SHA-256 of a file. Returns empty string on error.
+/**
+ * \brief Compute SHA-256 of a file.
+ * \param p Path to the file.
+ * \return 64-character lowercase hexadecimal string. Empty string on read or IO failure.
+ */
 std::string sha256_file(const fs::path &p);
 
-// Decide if src should be copied over dst (dst may not exist).
+/**
+ * \brief Decide whether the file at src should be copied over dst.
+ * \details Rules:
+ *  - If dst does not exist -> copy.
+ *  - If sizes differ -> copy.
+ *  - Otherwise compute SHA-256 for both; copy if hashes differ or any hash fails to compute.
+ */
 bool should_copy_file(const fs::path &src, const fs::path &dst);
 
-// Synchronize directory recursively (copy new/changed files, create dirs). Does not delete extra files.
+/**
+ * \brief Recursively perform a one-way synchronization of directories.
+ * \param source Source directory (must exist).
+ * \param dest Destination directory (created if necessary).
+ * \param stats Statistics accumulator to update.
+ * \note Files that exist only in dest are not deleted (no pruning).
+ */
 void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats);
 
-// Utility: strip matching leading+trailing quotes.
+/**
+ * \brief Remove surrounding symmetric quotes ("..." or '...') if present.
+ * \param v Input string view.
+ * \return A copy without outer quotes if both ends match and are quotes; otherwise the original content.
+ */
 std::string strip_quotes(std::string_view v);
-}
+} // namespace syncbone

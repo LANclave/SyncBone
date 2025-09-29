@@ -4,6 +4,7 @@
 #include <system_error>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 
 namespace syncbone {
 namespace fs = std::filesystem;
@@ -106,6 +107,20 @@ bool should_copy_file(const fs::path &src, const fs::path &dst) {
 }
 
 void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats) {
+    // Helper that tries std::filesystem first, then falls back to manual stream copy if needed
+    auto copy_file_force = [](const fs::path &src, const fs::path &dst) -> bool {
+        std::error_code ec;
+        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        if(!ec) return true;
+        // Fallback path: remove and copy manually (handles sporadic overwrite issues on some Windows runners)
+        std::error_code rm_ec; fs::remove(dst, rm_ec);
+        std::ifstream in(src, std::ios::binary);
+        if(!in) return false;
+        std::ofstream out(dst, std::ios::binary | std::ios::trunc);
+        if(!out) return false;
+        out << in.rdbuf();
+        return static_cast<bool>(out);
+    };
     for(auto const &entry : fs::recursive_directory_iterator(source)) {
         const auto &src_path = entry.path();
         auto rel = fs::relative(src_path, source);
@@ -120,8 +135,11 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
             if(should_copy_file(src_path, dst_path)) {
                 fs::create_directories(dst_path.parent_path(), ec);
                 ec.clear();
-                fs::copy_file(src_path, dst_path, fs::copy_options::overwrite_existing, ec);
-                if(ec) std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<": "<<ec.message()<<"\n"; else ++stats.files_copied;
+                if(copy_file_force(src_path, dst_path)) {
+                    ++stats.files_copied;
+                } else {
+                    std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n";
+                }
             } else ++stats.files_skipped;
         } else {
             std::cerr << "Skipping: "<<src_path<<"\n";

@@ -2,9 +2,9 @@ name: build-and-test
 
 on:
   push:
-    branches: [ main ]
+    branches: ["**"]  # run for all branches so every branch gets test feedback
   pull_request:
-    branches: [ main ]
+    branches: ["**"]
 
 jobs:
   cmake:
@@ -26,13 +26,24 @@ jobs:
 
       - name: Configure
         run: >
-          cmake -S . -B build
-          -G Ninja
-          -DBUILD_TESTING=ON
+          cmake -S . -B build \
+          -G Ninja \
+          -DBUILD_TESTING=ON \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }} --parallel
 
+      - name: List tests
+        run: ctest --test-dir build -N
+
       - name: Run tests
-        run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure
+        run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure -j 2
+
+      - name: Upload test log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-log-${{ matrix.os }}-${{ matrix.build_type }}
+          path: build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore

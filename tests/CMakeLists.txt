@@ -23,3 +23,15 @@ add_test(NAME verify_unicode_file
             ${CMAKE_BINARY_DIR}/synced_data/unicode_файл.txt)
 
 set_tests_properties(verify_synced_file1 verify_synced_file2 verify_unicode_file PROPERTIES DEPENDS sync_whole_tree WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+# --- Unit tests ---
+add_executable(syncbone_unit unit_sync.cpp)
+target_link_libraries(syncbone_unit PRIVATE syncbone_lib)
+target_include_directories(syncbone_unit PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME unit_sync COMMAND syncbone_unit)
+
+# Edge case unit tests
+add_executable(syncbone_unit_edge unit_edge.cpp)
+target_link_libraries(syncbone_unit_edge PRIVATE syncbone_lib)
+target_include_directories(syncbone_unit_edge PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME unit_edge COMMAND syncbone_unit_edge)

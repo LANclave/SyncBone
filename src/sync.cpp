@@ -106,7 +106,7 @@ bool should_copy_file(const fs::path &src, const fs::path &dst) {
     return h1 != h2;
 }
 
-void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats) {
+void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats, bool dry_run) {
     // Helper that tries std::filesystem first, then falls back to manual stream copy if needed
     auto copy_file_force = [](const fs::path &src, const fs::path &dst) -> bool {
         std::error_code ec;
@@ -128,17 +128,25 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
         std::error_code ec;
         if(entry.is_directory()) {
             if(!fs::exists(dst_path)) {
-                fs::create_directories(dst_path, ec);
-                if(!ec) ++stats.dirs_created; else std::cerr << "Warn: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n";
+                if(dry_run) {
+                    ++stats.dirs_created; // would create
+                } else {
+                    fs::create_directories(dst_path, ec);
+                    if(!ec) ++stats.dirs_created; else std::cerr << "Warn: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n";
+                }
             }
         } else if(entry.is_regular_file()) {
             if(should_copy_file(src_path, dst_path)) {
-                fs::create_directories(dst_path.parent_path(), ec);
-                ec.clear();
-                if(copy_file_force(src_path, dst_path)) {
-                    ++stats.files_copied;
+                if(dry_run) {
+                    ++stats.files_copied; // would copy
                 } else {
-                    std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n";
+                    fs::create_directories(dst_path.parent_path(), ec);
+                    ec.clear();
+                    if(copy_file_force(src_path, dst_path)) {
+                        ++stats.files_copied;
+                    } else {
+                        std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n";
+                    }
                 }
             } else ++stats.files_skipped;
         } else {

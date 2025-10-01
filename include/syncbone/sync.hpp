@@ -44,11 +44,12 @@ bool should_copy_file(const fs::path &src, const fs::path &dst);
 /**
  * \brief Recursively perform a one-way synchronization of directories.
  * \param source Source directory (must exist).
- * \param dest Destination directory (created if necessary).
+ * \param dest Destination directory (created if necessary unless dry_run).
  * \param stats Statistics accumulator to update.
+ * \param dry_run If true, no filesystem changes are performed; statistics reflect what WOULD happen.
  * \note Files that exist only in dest are not deleted (no pruning).
  */
-void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats);
+void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats, bool dry_run = false);
 
 /**
  * \brief Remove surrounding symmetric quotes ("..." or '...') if present.

@@ -37,6 +37,16 @@ static void test_dry_run_directory(){
 
 int main(){
     test_dry_run_directory();
+    // Basic threaded run equivalence (threads=2 should copy identical set)
+    auto src_thr = make_temp_dir("cli_thr_src");
+    write_file(src_thr/"x1.txt","X1");
+    write_file(src_thr/"x2.txt","X2");
+    fs::path dst_thr = fs::path("unit_tmp")/"cli_thr_dst"; fs::remove_all(dst_thr);
+    SyncStats st1; sync_directory(src_thr, dst_thr, st1, SyncOptions{.dry_run=false,.verbose=false,.threads=1});
+    assert(st1.files_copied == 2);
+    // Resync with threads should skip
+    SyncStats st2; sync_directory(src_thr, dst_thr, st2, SyncOptions{.dry_run=false,.verbose=false,.threads=2});
+    assert(st2.files_copied == 0 && st2.files_skipped == 2);
     std::cout << "CLI flag tests passed" << std::endl;
     return 0;
 }

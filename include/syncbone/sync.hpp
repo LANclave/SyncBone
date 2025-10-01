@@ -29,6 +29,7 @@ struct SyncStats {
 struct SyncOptions {
     bool dry_run = false;   //!< If true, do not modify filesystem; statistics show intended actions.
     bool verbose = false;   //!< If true, log per-file / per-directory actions (or intended actions in dry-run).
+    unsigned threads = 1;   //!< >1 enables parallel file processing (hash + copy). 1 = sequential.
 };
 
 /**

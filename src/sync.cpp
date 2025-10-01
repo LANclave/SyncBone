@@ -5,6 +5,9 @@
 #include <cstring>
 #include <iostream>
 #include <sstream>
+#include <thread>
+#include <mutex>
+#include <vector>
 
 namespace syncbone {
 namespace fs = std::filesystem;
@@ -122,50 +125,80 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
         out << in.rdbuf();
         return static_cast<bool>(out);
     };
+    // Collect entries first for potential parallel processing
+    std::vector<fs::path> dirs; dirs.reserve(128);
+    std::vector<fs::path> files; files.reserve(256);
     for(auto const &entry : fs::recursive_directory_iterator(source)) {
-        const auto &src_path = entry.path();
+        if(entry.is_directory()) dirs.push_back(entry.path());
+        else if(entry.is_regular_file()) files.push_back(entry.path());
+        else if(options.verbose) std::cerr << "Skipping: "<< entry.path() << "\n";
+    }
+    // Sort directories by path length (shorter first) to ensure parent before child
+    std::sort(dirs.begin(), dirs.end(), [](auto const &a, auto const &b){ return a.generic_string().size() < b.generic_string().size(); });
+    // Phase 1: create directories
+    for(auto const &src_path : dirs) {
         auto rel = fs::relative(src_path, source);
         fs::path dst_path = dest / rel;
-        std::error_code ec;
-        if(entry.is_directory()) {
-            if(!fs::exists(dst_path)) {
-                if(dry_run) {
-                    ++stats.dirs_created; // would create
-                    if(options.verbose) std::cout << "DRY-RUN: mkdir " << rel.generic_string() << "\n";
-                } else {
-                    fs::create_directories(dst_path, ec);
-                    if(!ec) {
-                        ++stats.dirs_created;
-                        if(options.verbose) std::cout << "mkdir " << rel.generic_string() << "\n";
-                    } else std::cerr << "Warn: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n";
-                }
-            }
-        } else if(entry.is_regular_file()) {
-            if(should_copy_file(src_path, dst_path)) {
-                if(dry_run) {
-                    ++stats.files_copied; // would copy
-                    if(options.verbose) std::cout << "DRY-RUN: copy " << rel.generic_string() << "\n";
-                } else {
-                    fs::create_directories(dst_path.parent_path(), ec);
-                    ec.clear();
-                    if(copy_file_force(src_path, dst_path)) {
-                        ++stats.files_copied;
-                        if(options.verbose) std::cout << "copy " << rel.generic_string() << "\n";
-                    } else {
-                        std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n";
-                    }
-                }
+        if(!fs::exists(dst_path)) {
+            if(dry_run) {
+                ++stats.dirs_created;
+                if(options.verbose) std::cout << "DRY-RUN: mkdir " << rel.generic_string() << "\n";
             } else {
-                ++stats.files_skipped;
-                if(options.verbose) {
-                    if(dry_run) std::cout << "DRY-RUN: skip (identical) " << rel.generic_string() << "\n";
-                    else std::cout << "skip " << rel.generic_string() << "\n";
-                }
+                std::error_code ec; fs::create_directories(dst_path, ec);
+                if(!ec) {
+                    ++stats.dirs_created; if(options.verbose) std::cout << "mkdir " << rel.generic_string() << "\n";
+                } else std::cerr << "Warn: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n";
             }
-        } else {
-            std::cerr << "Skipping: "<<src_path<<"\n";
         }
     }
+    // Phase 2: files (maybe parallel)
+    unsigned thread_count = options.threads == 0 ? std::thread::hardware_concurrency() : options.threads;
+    if(thread_count <= 1 || files.size() < 8) {
+        // sequential fallback
+        for(auto const &src_path : files) {
+            auto rel = fs::relative(src_path, source); fs::path dst_path = dest / rel; std::error_code ec;
+            bool need = should_copy_file(src_path, dst_path);
+            if(need) {
+                if(dry_run) { ++stats.files_copied; if(options.verbose) std::cout << "DRY-RUN: copy "<<rel.generic_string()<<"\n"; }
+                else {
+                    fs::create_directories(dst_path.parent_path(), ec); ec.clear();
+                    if(copy_file_force(src_path, dst_path)) { ++stats.files_copied; if(options.verbose) std::cout << "copy "<<rel.generic_string()<<"\n"; }
+                    else std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n";
+                }
+            } else {
+                ++stats.files_skipped; if(options.verbose) { if(dry_run) std::cout << "DRY-RUN: skip (identical) "<<rel.generic_string()<<"\n"; else std::cout << "skip "<<rel.generic_string()<<"\n"; }
+            }
+        }
+        return;
+    }
+    thread_count = std::min<unsigned>(thread_count, static_cast<unsigned>(files.size()));
+    std::mutex out_mutex;
+    std::vector<std::thread> workers; workers.reserve(thread_count);
+    std::vector<std::uintmax_t> copied(thread_count,0), skipped(thread_count,0);
+    auto worker = [&](unsigned idx){
+        size_t chunk = (files.size() + thread_count - 1)/thread_count;
+        size_t begin = idx * chunk;
+        size_t end = std::min(files.size(), begin + chunk);
+        for(size_t i=begin; i<end; ++i) {
+            const auto &src_path = files[i];
+            auto rel = fs::relative(src_path, source); fs::path dst_path = dest / rel; std::error_code ec;
+            bool need = should_copy_file(src_path, dst_path);
+            if(need) {
+                if(dry_run) {
+                    ++copied[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); std::cout << "DRY-RUN: copy "<<rel.generic_string()<<"\n"; }
+                } else {
+                    fs::create_directories(dst_path.parent_path(), ec); ec.clear();
+                    if(copy_file_force(src_path, dst_path)) { ++copied[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); std::cout << "copy "<<rel.generic_string()<<"\n"; } }
+                    else { std::lock_guard<std::mutex> lk(out_mutex); std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n"; }
+                }
+            } else {
+                ++skipped[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); if(dry_run) std::cout << "DRY-RUN: skip (identical) "<<rel.generic_string()<<"\n"; else std::cout << "skip "<<rel.generic_string()<<"\n"; }
+            }
+        }
+    };
+    for(unsigned t=0;t<thread_count;++t) workers.emplace_back(worker,t);
+    for(auto &th: workers) th.join();
+    for(unsigned t=0;t<thread_count;++t){ stats.files_copied += copied[t]; stats.files_skipped += skipped[t]; }
 }
 
 // Backward compatibility overload

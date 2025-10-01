@@ -47,3 +47,7 @@ set(CLI_VERBOSE_DRY_OUT "${CMAKE_BINARY_DIR}/cli_verbose_dry_out")
 add_test(NAME cli_verbose_dry_run
     COMMAND $<TARGET_FILE:syncbone> --verbose --dry-run ${CMAKE_SOURCE_DIR}/test_data ${CLI_VERBOSE_DRY_OUT})
 set_tests_properties(cli_verbose_dry_run PROPERTIES PASS_REGULAR_EXPRESSION "DRY-RUN: copy")
+
+add_test(NAME cli_threads_basic
+    COMMAND $<TARGET_FILE:syncbone> --threads 2 ${CMAKE_SOURCE_DIR}/test_data ${CMAKE_BINARY_DIR}/cli_threads_out)
+set_tests_properties(cli_threads_basic PROPERTIES PASS_REGULAR_EXPRESSION "Synced directory")

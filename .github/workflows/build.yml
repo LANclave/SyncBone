@@ -40,6 +40,22 @@ jobs:
       - name: Run tests
         run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure -j 2
 
+      - name: Show CLI related tests
+        shell: pwsh
+        run: |
+          $tests = ctest --test-dir build -N
+          $cli = $tests | Select-String -Pattern 'cli'
+          if ($cli) {
+            "CLI tests present:"; $cli | ForEach-Object { $_.Line }
+          } else { "CLI tests: (none)" }
+
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: |
+          "=== SUMMARY (${{ matrix.os }} / ${{ matrix.build_type }}) ==="
+          ctest --test-dir build -C ${{ matrix.build_type }} -N | Select-Object -First 200
+
       - name: Upload test log (always)
         if: always()
         uses: actions/upload-artifact@v4

@@ -24,12 +24,12 @@ static void test_dry_run_directory(){
     fs::remove_all(dst_root);
     // Determine expected number of files
     std::size_t expected_files = 0; for(auto &e: fs::recursive_directory_iterator(src_root)) if(e.is_regular_file()) ++expected_files;
-    SyncStats stats; sync_directory(src_root, dst_root, stats, true); // dry run
+    SyncStats stats; sync_directory(src_root, dst_root, stats, SyncOptions{.dry_run=true,.verbose=true}); // dry run verbose
     assert(stats.files_copied == expected_files);
     assert(stats.files_skipped == 0);
     assert(!fs::exists(dst_root));
     // Real run should copy exactly those files
-    SyncStats real_stats; sync_directory(src_root, dst_root, real_stats, false);
+    SyncStats real_stats; sync_directory(src_root, dst_root, real_stats, SyncOptions{.dry_run=false,.verbose=true});
     assert(real_stats.files_copied == expected_files);
     assert(fs::exists(dst_root/"a.txt"));
     assert(fs::exists(dst_root/"sub"/"b.txt"));

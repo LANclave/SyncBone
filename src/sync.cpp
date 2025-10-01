@@ -106,7 +106,8 @@ bool should_copy_file(const fs::path &src, const fs::path &dst) {
     return h1 != h2;
 }
 
-void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats, bool dry_run) {
+void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats, const SyncOptions &options) {
+    bool dry_run = options.dry_run;
     // Helper that tries std::filesystem first, then falls back to manual stream copy if needed
     auto copy_file_force = [](const fs::path &src, const fs::path &dst) -> bool {
         std::error_code ec;
@@ -130,29 +131,46 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
             if(!fs::exists(dst_path)) {
                 if(dry_run) {
                     ++stats.dirs_created; // would create
+                    if(options.verbose) std::cout << "DRY-RUN: mkdir " << rel.generic_string() << "\n";
                 } else {
                     fs::create_directories(dst_path, ec);
-                    if(!ec) ++stats.dirs_created; else std::cerr << "Warn: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n";
+                    if(!ec) {
+                        ++stats.dirs_created;
+                        if(options.verbose) std::cout << "mkdir " << rel.generic_string() << "\n";
+                    } else std::cerr << "Warn: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n";
                 }
             }
         } else if(entry.is_regular_file()) {
             if(should_copy_file(src_path, dst_path)) {
                 if(dry_run) {
                     ++stats.files_copied; // would copy
+                    if(options.verbose) std::cout << "DRY-RUN: copy " << rel.generic_string() << "\n";
                 } else {
                     fs::create_directories(dst_path.parent_path(), ec);
                     ec.clear();
                     if(copy_file_force(src_path, dst_path)) {
                         ++stats.files_copied;
+                        if(options.verbose) std::cout << "copy " << rel.generic_string() << "\n";
                     } else {
                         std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n";
                     }
                 }
-            } else ++stats.files_skipped;
+            } else {
+                ++stats.files_skipped;
+                if(options.verbose) {
+                    if(dry_run) std::cout << "DRY-RUN: skip (identical) " << rel.generic_string() << "\n";
+                    else std::cout << "skip " << rel.generic_string() << "\n";
+                }
+            }
         } else {
             std::cerr << "Skipping: "<<src_path<<"\n";
         }
     }
+}
+
+// Backward compatibility overload
+void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats, bool dry_run) {
+    SyncOptions opts; opts.dry_run = dry_run; sync_directory(source, dest, stats, opts);
 }
 
 std::string strip_quotes(std::string_view v) {

@@ -20,11 +20,13 @@ int main(int argc, char* argv[]) {
     }
 
     bool dry_run = false;
+    bool verbose = false;
     fs::path source;
     fs::path dest;
     for(int i=1;i<argc;++i){
         std::string_view a = argv[i];
-        if(a == "--dry-run" || a == "-n") { dry_run = true; continue; }
+    if(a == "--dry-run" || a == "-n") { dry_run = true; continue; }
+    if(a == "--verbose" || a == "-v") { verbose = true; continue; }
         if(source.empty()) source = strip_quotes(argv[i]);
         else if(dest.empty()) dest = strip_quotes(argv[i]);
         else {
@@ -51,7 +53,8 @@ int main(int argc, char* argv[]) {
                               << " (" << ec.message() << ")\n"; return 1;
                 }
             }
-            SyncStats stats; sync_directory(source, dest, stats, dry_run);
+            syncbone::SyncOptions opts; opts.dry_run=dry_run; opts.verbose=verbose;
+            SyncStats stats; sync_directory(source, dest, stats, opts);
             std::cout << (dry_run?"DRY-RUN: ":"")
                       << "Synced directory " << source << " -> " << dest
                       << " | copied: " << stats.files_copied
@@ -59,8 +62,7 @@ int main(int argc, char* argv[]) {
                       << ", new dirs: " << stats.dirs_created << "\n";
         } else {
             if(dry_run) {
-                bool need_copy = true; // single-file path, treat as would copy (no hashing logic reuse here)
-                std::cout << "DRY-RUN: Copied file " << source << " -> " << dest << " (simulated)\n";
+                std::cout << (verbose?"DRY-RUN: copy file ":"DRY-RUN: Copied file ") << source << " -> " << dest << " (simulated)\n";
                 return 0;
             }
             if (dest.has_parent_path() && !dest.parent_path().empty()) {

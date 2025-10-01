@@ -35,3 +35,19 @@ add_executable(syncbone_unit_edge unit_edge.cpp)
 target_link_libraries(syncbone_unit_edge PRIVATE syncbone_lib)
 target_include_directories(syncbone_unit_edge PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME unit_edge COMMAND syncbone_unit_edge)
+
+# CLI flags / dry-run tests (aggregated future CLI-related tests)
+add_executable(syncbone_unit_cli unit_cli_test.cpp)
+target_link_libraries(syncbone_unit_cli PRIVATE syncbone_lib)
+target_include_directories(syncbone_unit_cli PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME unit_cli COMMAND syncbone_unit_cli)
+
+# CLI verbose + dry-run combined through actual binary (ensures flag parsing works)
+set(CLI_VERBOSE_DRY_OUT "${CMAKE_BINARY_DIR}/cli_verbose_dry_out")
+add_test(NAME cli_verbose_dry_run
+    COMMAND $<TARGET_FILE:syncbone> --verbose --dry-run ${CMAKE_SOURCE_DIR}/test_data ${CLI_VERBOSE_DRY_OUT})
+set_tests_properties(cli_verbose_dry_run PROPERTIES PASS_REGULAR_EXPRESSION "DRY-RUN: copy")
+
+add_test(NAME cli_threads_basic
+    COMMAND $<TARGET_FILE:syncbone> --threads 2 ${CMAKE_SOURCE_DIR}/test_data ${CMAKE_BINARY_DIR}/cli_threads_out)
+set_tests_properties(cli_threads_basic PROPERTIES PASS_REGULAR_EXPRESSION "Synced directory")

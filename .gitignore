@@ -1,4 +1,5 @@
 build/
+.vscode/settings.json
 
 # Prerequisites
 *.d
@@ -41,3 +42,4 @@ build/
 
 # debug information files
 *.dwo
+

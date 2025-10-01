@@ -8,6 +8,7 @@
 #include <thread>
 #include <mutex>
 #include <vector>
+#include <algorithm>
 
 namespace syncbone {
 namespace fs = std::filesystem;

@@ -1,6 +1,11 @@
 build/
 .vscode/settings.json
 
+# Benchmark artifacts
+bench_src/
+bench_dst/
+bench_dst_resync/
+
 # Prerequisites
 *.d
 

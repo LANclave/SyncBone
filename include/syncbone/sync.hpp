@@ -23,6 +23,7 @@ struct SyncStats {
     std::uintmax_t files_copied = 0;  //!< Number of files actually copied (new or changed)
     std::uintmax_t files_skipped = 0; //!< Number of files skipped because they were identical
     std::uintmax_t dirs_created = 0;  //!< Number of subdirectories created
+    std::uintmax_t errors = 0;        //!< Number of copy / directory creation failures encountered
 };
 
 /** \brief Options controlling synchronization behavior. */
@@ -30,6 +31,7 @@ struct SyncOptions {
     bool dry_run = false;   //!< If true, do not modify filesystem; statistics show intended actions.
     bool verbose = false;   //!< If true, log per-file / per-directory actions (or intended actions in dry-run).
     unsigned threads = 1;   //!< >1 enables parallel file processing (hash + copy). 1 = sequential.
+    bool color = false;     //!< Colorize console output (ANSI). Default off unless explicitly requested.
 };
 
 /**

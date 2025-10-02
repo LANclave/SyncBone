@@ -156,7 +156,7 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
                 std::error_code ec; fs::create_directories(dst_path, ec);
                 if(!ec) {
                     ++stats.dirs_created; if(options.verbose) std::cout << C_MKDIR << "mkdir" << C_RESET << " " << rel.generic_string() << "\n";
-                } else std::cerr << "Warn: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n";
+                } else { std::cerr << "WARN: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n"; ++stats.errors; }
             }
         }
     }
@@ -172,7 +172,7 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
                 else {
                     fs::create_directories(dst_path.parent_path(), ec); ec.clear();
                     if(copy_file_force(src_path, dst_path)) { ++stats.files_copied; if(options.verbose) std::cout << C_COPY << "copy" << C_RESET << " "<<rel.generic_string()<<"\n"; }
-                    else std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n";
+                    else { std::cerr << "WARN: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n"; ++stats.errors; }
                 }
             } else {
                 ++stats.files_skipped; if(options.verbose) { if(dry_run) std::cout << C_DRY << "DRY-RUN:" << C_RESET << " " << C_SKIP << "skip" << C_RESET << " (identical) "<<rel.generic_string()<<"\n"; else std::cout << C_SKIP << "skip" << C_RESET << " "<<rel.generic_string()<<"\n"; }
@@ -198,7 +198,7 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
                 } else {
                     fs::create_directories(dst_path.parent_path(), ec); ec.clear();
                     if(copy_file_force(src_path, dst_path)) { ++copied[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); std::cout << C_COPY << "copy" << C_RESET << " "<<rel.generic_string()<<"\n"; } }
-                    else { std::lock_guard<std::mutex> lk(out_mutex); std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n"; }
+                    else { std::lock_guard<std::mutex> lk(out_mutex); std::cerr << "WARN: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n"; }
                 }
             } else {
                 ++skipped[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); if(dry_run) std::cout << C_DRY << "DRY-RUN:" << C_RESET << " " << C_SKIP << "skip" << C_RESET << " (identical) "<<rel.generic_string()<<"\n"; else std::cout << C_SKIP << "skip" << C_RESET << " "<<rel.generic_string()<<"\n"; }

@@ -11,13 +11,23 @@ using syncbone::sync_directory;
 using syncbone::strip_quotes;
 
 int main(int argc, char* argv[]) {
-    if (argc < 3) {
+    auto print_usage = [](){
         std::cout << "Usage: syncbone [options] <source_path> <destination_path>\n"
                      "Options:\n"
-                     "  --dry-run, -n   Show what would change without modifying anything\n"
-                     "Synchronize a single file or an entire directory tree (one-way).\n";
-        return 1;
-    }
+                     "  --dry-run, -n        Show planned actions only (no changes)\n"
+                     "  --verbose, -v        Per-file logging (copy/skip/mkdir)\n"
+                     "  --threads N          Parallel file hashing/copy (N>0, 0=auto)\n"
+                     "  --color|-c           Colorize output\n"
+                     "  --no-color           Disable color if previously enabled\n"
+                     "Exit codes:\n"
+                     "  0 success\n"
+                     "  1 usage / argument error\n"
+                     "  2 source not found\n"
+                     "  3 destination create error\n"
+                     "  4 partial failures (some files/dirs failed)\n"
+                     "  5 unexpected internal error\n";
+    };
+    if (argc < 3) { print_usage(); return 1; }
 
     bool dry_run = false;
     bool verbose = false;
@@ -30,10 +40,10 @@ int main(int argc, char* argv[]) {
     if(a == "--dry-run" || a == "-n") { dry_run = true; continue; }
         if(a == "--verbose" || a == "-v") { verbose = true; continue; }
         if(a == "--threads") {
-            if(i+1>=argc) { std::cerr << "Error: --threads requires a number" << "\n"; return 1; }
+            if(i+1>=argc) { std::cerr << "ERROR: --threads requires a number" << "\n"; return 1; }
             std::string val = argv[++i];
-            try { int n = std::stoi(val); if(n<=0){ std::cerr << "Error: threads must be >0"<<"\n"; return 1;} threads = static_cast<unsigned>(n); }
-            catch(...) { std::cerr << "Error: invalid threads value"<<"\n"; return 1; }
+            try { int n = std::stoi(val); if(n<0){ std::cerr << "ERROR: threads must be >=0"<<"\n"; return 1;} threads = static_cast<unsigned>(n); }
+            catch(...) { std::cerr << "ERROR: invalid threads value"<<"\n"; return 1; }
             continue;
         }
         if(a == "--color" || a == "-c") { color = true; continue; }
@@ -41,27 +51,27 @@ int main(int argc, char* argv[]) {
         if(source.empty()) source = strip_quotes(argv[i]);
         else if(dest.empty()) dest = strip_quotes(argv[i]);
         else {
-            std::cerr << "Unexpected extra argument: " << a << "\n";
+            std::cerr << "ERROR: unexpected extra argument: " << a << "\n";
             return 1;
         }
     }
     if(source.empty() || dest.empty()) {
-        std::cerr << "Error: source and destination required.\n";
+        std::cerr << "ERROR: source and destination required.\n";
         return 1;
     }
 
     try {
         if (!fs::exists(source)) {
-            std::cerr << "Error: source does not exist: " << source << "\n";
-            return 1;
+            std::cerr << "ERROR: source does not exist: " << source << "\n";
+            return 2;
         }
 
         if (fs::is_directory(source)) {
             if (!dry_run && !fs::exists(dest)) {
                 std::error_code ec; fs::create_directories(dest, ec);
                 if (ec) {
-                    std::cerr << "Error: cannot create destination directory: " << dest
-                              << " (" << ec.message() << ")\n"; return 1;
+                    std::cerr << "ERROR: cannot create destination directory: " << dest
+                              << " (" << ec.message() << ")\n"; return 3;
                 }
             }
             syncbone::SyncOptions opts; opts.dry_run=dry_run; opts.verbose=verbose; opts.threads=threads; opts.color=color;
@@ -75,7 +85,10 @@ int main(int argc, char* argv[]) {
                       << C_HDR << "Synced directory" << C_RESET << " " << source << " -> " << dest
                       << " | copied: " << C_NUM << stats.files_copied << C_RESET
                       << ", skipped: " << C_SKIP << stats.files_skipped << C_RESET
-                      << ", new dirs: " << C_DIR << stats.dirs_created << C_RESET << "\n";
+                      << ", new dirs: " << C_DIR << stats.dirs_created << C_RESET
+                      << (stats.errors? (color?" \x1b[31mERRORS:\x1b[0m ":" ERRORS: ") + std::to_string(stats.errors) : std::string())
+                      << "\n";
+            if(stats.errors) return 4; // partial failures
         } else {
             if(dry_run) {
                 if(color) std::cout << "\x1b[35mDRY-RUN:\x1b[0m " << (verbose?"\x1b[32mcopy file\x1b[0m ":"Copied file ") << source << " -> " << dest << " (simulated)\n"; else
@@ -85,16 +98,16 @@ int main(int argc, char* argv[]) {
             if (dest.has_parent_path() && !dest.parent_path().empty()) {
                 std::error_code ec; fs::create_directories(dest.parent_path(), ec);
                 if (ec) {
-                    std::cerr << "Error: cannot create destination directory: " << dest.parent_path()
-                              << " (" << ec.message() << ")\n"; return 1;
+                    std::cerr << "ERROR: cannot create destination directory: " << dest.parent_path()
+                              << " (" << ec.message() << ")\n"; return 3;
                 }
             }
             std::error_code ec; fs::copy_file(source, dest, fs::copy_options::overwrite_existing, ec);
-            if (ec) { std::cerr << "Error: failed to copy file: " << ec.message() << "\n"; return 1; }
+            if (ec) { std::cerr << "ERROR: failed to copy file: " << ec.message() << "\n"; return 4; }
             std::cout << "Copied file " << source << " -> " << dest << "\n";
         }
     } catch(const std::exception &e) {
-        std::cerr << "Error: " << e.what() << "\n"; return 1;
+        std::cerr << "ERROR: unexpected exception: " << e.what() << "\n"; return 5;
     }
     return 0;
 }

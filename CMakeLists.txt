@@ -24,3 +24,11 @@ include(CTest)
 if (BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
+# --- Benchmarks (basic) ---
+option(BUILD_BENCHMARKS "Build benchmark executable" ON)
+if(BUILD_BENCHMARKS)
+    add_executable(syncbone_bench benchmarks/bench_main.cpp)
+    target_link_libraries(syncbone_bench PRIVATE syncbone_lib)
+    target_include_directories(syncbone_bench PRIVATE ${CMAKE_SOURCE_DIR}/include)
+endif()

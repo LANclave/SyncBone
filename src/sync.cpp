@@ -112,6 +112,12 @@ bool should_copy_file(const fs::path &src, const fs::path &dst) {
 
 void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &stats, const SyncOptions &options) {
     bool dry_run = options.dry_run;
+    // ANSI color helpers (enabled only if options.color=true). Keep simple to avoid overhead.
+    const char* C_RESET = options.color ? "\x1b[0m" : "";
+    const char* C_COPY  = options.color ? "\x1b[32m" : ""; // green
+    const char* C_SKIP  = options.color ? "\x1b[33m" : ""; // yellow
+    const char* C_MKDIR = options.color ? "\x1b[36m" : ""; // cyan
+    const char* C_DRY   = options.color ? "\x1b[35m" : ""; // magenta prefix
     // Helper that tries std::filesystem first, then falls back to manual stream copy if needed
     auto copy_file_force = [](const fs::path &src, const fs::path &dst) -> bool {
         std::error_code ec;
@@ -141,13 +147,15 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
         auto rel = fs::relative(src_path, source);
         fs::path dst_path = dest / rel;
         if(!fs::exists(dst_path)) {
-            if(dry_run) {
-                ++stats.dirs_created;
-                if(options.verbose) std::cout << "DRY-RUN: mkdir " << rel.generic_string() << "\n";
+                if(dry_run) {
+                    ++stats.dirs_created;
+                    if(options.verbose) std::cout << C_DRY << "DRY-RUN:" << C_RESET << " "
+                                                   << C_MKDIR << "mkdir" << C_RESET << " "
+                                                   << rel.generic_string() << "\n";
             } else {
                 std::error_code ec; fs::create_directories(dst_path, ec);
                 if(!ec) {
-                    ++stats.dirs_created; if(options.verbose) std::cout << "mkdir " << rel.generic_string() << "\n";
+                    ++stats.dirs_created; if(options.verbose) std::cout << C_MKDIR << "mkdir" << C_RESET << " " << rel.generic_string() << "\n";
                 } else std::cerr << "Warn: cannot create dir "<<dst_path<<": "<<ec.message()<<"\n";
             }
         }
@@ -160,14 +168,14 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
             auto rel = fs::relative(src_path, source); fs::path dst_path = dest / rel; std::error_code ec;
             bool need = should_copy_file(src_path, dst_path);
             if(need) {
-                if(dry_run) { ++stats.files_copied; if(options.verbose) std::cout << "DRY-RUN: copy "<<rel.generic_string()<<"\n"; }
+                if(dry_run) { ++stats.files_copied; if(options.verbose) std::cout << C_DRY << "DRY-RUN:" << C_RESET << " " << C_COPY << "copy" << C_RESET << " "<<rel.generic_string()<<"\n"; }
                 else {
                     fs::create_directories(dst_path.parent_path(), ec); ec.clear();
-                    if(copy_file_force(src_path, dst_path)) { ++stats.files_copied; if(options.verbose) std::cout << "copy "<<rel.generic_string()<<"\n"; }
+                    if(copy_file_force(src_path, dst_path)) { ++stats.files_copied; if(options.verbose) std::cout << C_COPY << "copy" << C_RESET << " "<<rel.generic_string()<<"\n"; }
                     else std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n";
                 }
             } else {
-                ++stats.files_skipped; if(options.verbose) { if(dry_run) std::cout << "DRY-RUN: skip (identical) "<<rel.generic_string()<<"\n"; else std::cout << "skip "<<rel.generic_string()<<"\n"; }
+                ++stats.files_skipped; if(options.verbose) { if(dry_run) std::cout << C_DRY << "DRY-RUN:" << C_RESET << " " << C_SKIP << "skip" << C_RESET << " (identical) "<<rel.generic_string()<<"\n"; else std::cout << C_SKIP << "skip" << C_RESET << " "<<rel.generic_string()<<"\n"; }
             }
         }
         return;
@@ -186,14 +194,14 @@ void sync_directory(const fs::path &source, const fs::path &dest, SyncStats &sta
             bool need = should_copy_file(src_path, dst_path);
             if(need) {
                 if(dry_run) {
-                    ++copied[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); std::cout << "DRY-RUN: copy "<<rel.generic_string()<<"\n"; }
+                    ++copied[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); std::cout << C_DRY << "DRY-RUN:" << C_RESET << " " << C_COPY << "copy" << C_RESET << " "<<rel.generic_string()<<"\n"; }
                 } else {
                     fs::create_directories(dst_path.parent_path(), ec); ec.clear();
-                    if(copy_file_force(src_path, dst_path)) { ++copied[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); std::cout << "copy "<<rel.generic_string()<<"\n"; } }
+                    if(copy_file_force(src_path, dst_path)) { ++copied[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); std::cout << C_COPY << "copy" << C_RESET << " "<<rel.generic_string()<<"\n"; } }
                     else { std::lock_guard<std::mutex> lk(out_mutex); std::cerr << "Warn: copy failed "<<src_path<<" -> "<<dst_path<<" (fallback)\n"; }
                 }
             } else {
-                ++skipped[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); if(dry_run) std::cout << "DRY-RUN: skip (identical) "<<rel.generic_string()<<"\n"; else std::cout << "skip "<<rel.generic_string()<<"\n"; }
+                ++skipped[idx]; if(options.verbose){ std::lock_guard<std::mutex> lk(out_mutex); if(dry_run) std::cout << C_DRY << "DRY-RUN:" << C_RESET << " " << C_SKIP << "skip" << C_RESET << " (identical) "<<rel.generic_string()<<"\n"; else std::cout << C_SKIP << "skip" << C_RESET << " "<<rel.generic_string()<<"\n"; }
             }
         }
     };

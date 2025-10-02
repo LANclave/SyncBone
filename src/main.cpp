@@ -22,6 +22,7 @@ int main(int argc, char* argv[]) {
     bool dry_run = false;
     bool verbose = false;
     unsigned threads = 1;
+    bool color = false;
     fs::path source;
     fs::path dest;
     for(int i=1;i<argc;++i){
@@ -35,6 +36,8 @@ int main(int argc, char* argv[]) {
             catch(...) { std::cerr << "Error: invalid threads value"<<"\n"; return 1; }
             continue;
         }
+        if(a == "--color" || a == "-c") { color = true; continue; }
+        if(a == "--no-color") { color = false; continue; }
         if(source.empty()) source = strip_quotes(argv[i]);
         else if(dest.empty()) dest = strip_quotes(argv[i]);
         else {
@@ -61,16 +64,22 @@ int main(int argc, char* argv[]) {
                               << " (" << ec.message() << ")\n"; return 1;
                 }
             }
-            syncbone::SyncOptions opts; opts.dry_run=dry_run; opts.verbose=verbose; opts.threads=threads;
+            syncbone::SyncOptions opts; opts.dry_run=dry_run; opts.verbose=verbose; opts.threads=threads; opts.color=color;
             SyncStats stats; sync_directory(source, dest, stats, opts);
-            std::cout << (dry_run?"DRY-RUN: ":"")
-                      << "Synced directory " << source << " -> " << dest
-                      << " | copied: " << stats.files_copied
-                      << ", skipped: " << stats.files_skipped
-                      << ", new dirs: " << stats.dirs_created << "\n";
+            const char* C_RESET = (color?"\x1b[0m":"");
+            const char* C_HDR   = (color?"\x1b[1m":"");
+            const char* C_NUM   = (color?"\x1b[32m":"");
+            const char* C_SKIP  = (color?"\x1b[33m":"");
+            const char* C_DIR   = (color?"\x1b[36m":"");
+            std::cout << (dry_run?(color?"\x1b[35mDRY-RUN:\x1b[0m ":"DRY-RUN: "):"")
+                      << C_HDR << "Synced directory" << C_RESET << " " << source << " -> " << dest
+                      << " | copied: " << C_NUM << stats.files_copied << C_RESET
+                      << ", skipped: " << C_SKIP << stats.files_skipped << C_RESET
+                      << ", new dirs: " << C_DIR << stats.dirs_created << C_RESET << "\n";
         } else {
             if(dry_run) {
-                std::cout << (verbose?"DRY-RUN: copy file ":"DRY-RUN: Copied file ") << source << " -> " << dest << " (simulated)\n";
+                if(color) std::cout << "\x1b[35mDRY-RUN:\x1b[0m " << (verbose?"\x1b[32mcopy file\x1b[0m ":"Copied file ") << source << " -> " << dest << " (simulated)\n"; else
+                    std::cout << (verbose?"DRY-RUN: copy file ":"DRY-RUN: Copied file ") << source << " -> " << dest << " (simulated)\n";
                 return 0;
             }
             if (dest.has_parent_path() && !dest.parent_path().empty()) {
